@@ -67,10 +67,17 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
+	struct page page;
 	/* TODO: Fill this function. */
+	page.va = pg_round_down (va);
+	struct hash_elem *e = hash_find (spt -> page_table, &page.hash_elem);
+	if (e == NULL) {
+		return NULL;
+	}
+	struct page *result = hash_entry (e, struct page, hash_elem);
+	ASSERT((va < result -> va + PGSIZE) && va >= result -> va);
 
-	return page;
+	return result;
 }
 
 /* Insert PAGE into spt with validation. */
