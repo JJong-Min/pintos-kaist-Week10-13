@@ -232,14 +232,24 @@ vm_claim_page (void *va UNUSED) {
 /* Claim the PAGE and set up the mmu. */
 static bool
 vm_do_claim_page (struct page *page) {
+	struct thread *curr = thread_current ();
 	struct frame *frame = vm_get_frame ();
-
 	/* Set links */
+	ASSERT (frame != NULL);
+	ASSERT (page != NULL);
 	frame->page = page;
 	page->frame = frame;
 
-	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	// Add to frame_list for eviction clock algorithm
+	if (clock_elem != NULL)
+		// Just before current clock
+		list_insert (clock_elem, &frame->elem);
+	else
+		list_push_back (&frame_list, &frame->elem);
 
+	/* Insert page table entry to map page's VA to frame's PA. */
+	if (!pml4_set_page (curr -> pml4, page -> va, frame->kva, page -> writable))
+		return false;
 	return swap_in (page, frame->kva);
 }
 
