@@ -268,6 +268,7 @@ process_exec (void *f_name) {
 
 	/* We first kill the current context */
 	process_cleanup ();
+	supplemental_page_table_init (&thread_current () -> spt);
 	// printf("[process_exec] before load: %s\n", file_name);
 	/* And then load the binary */
 	success = load (file_name, &_if);
@@ -751,6 +752,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	return true;
 }
 
+#define WORD_ALIGN(addr) ((uint64_t)addr - ((uint64_t)addr/8)*8)
 /* Create a minimal stack by mapping a zeroed page at the USER_STACK */
 static bool
 setup_stack (struct intr_frame *if_) {
@@ -760,8 +762,31 @@ setup_stack (struct intr_frame *if_) {
 	kpage = palloc_get_page (PAL_USER | PAL_ZERO);
 	if (kpage != NULL) {
 		success = install_page (((uint8_t *) USER_STACK) - PGSIZE, kpage, true);
-		if (success)
-			if_->rsp = USER_STACK;
+		if (success) {
+			char **argv = (char **) if_->R.rsi;
+			uint64_t argc = if_->R.rdi;
+			uint64_t stack_pos = USER_STACK;
+			uint64_t args_pos[32];
+			for (int i=0;i<(int) argc;i++) {
+				size_t tmplen = strlen(argv[i]);
+				stack_pos = stack_pos - tmplen - 1;
+				strlcpy((char*) stack_pos, argv[i], 128);
+				args_pos[i] = stack_pos;
+			}
+			stack_pos -= WORD_ALIGN(stack_pos);
+			for (int i = argc;i>=0;i--) {
+				stack_pos -= 8;
+				if (i == (int) argc) *(char *)(stack_pos) = 0;
+				else {
+					memcpy((void *) stack_pos, &(args_pos[i]), 8);
+				}
+			}
+			stack_pos -= 8;
+			*((uint64_t *) stack_pos) = 0;
+			if_->rsp = stack_pos;
+			if_->R.rsi = stack_pos + 8;
+			if_->R.rdi = argc;
+		}
 		else
 			palloc_free_page (kpage);
 	}
