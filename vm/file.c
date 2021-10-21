@@ -31,7 +31,7 @@ struct mmap_file_info{
 /* The initializer of file vm */
 void
 vm_file_init (void) {
-	list_init (&mmap_file_list);
+	// list_init (&mmap_file_list);
 }
 
 
@@ -39,12 +39,12 @@ vm_file_init (void) {
 bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
-	struct file *file = ((struct mmap_info *)page->uninit.aux)->file;
-	page->operations = &file_ops;
+// 	struct file *file = ((struct mmap_info *)page->uninit.aux)->file;
+// 	page->operations = &file_ops;
 
-	struct file_page *file_page = &page->file;
-	file_page -> file = file;
-	return true;
+// 	struct file_page *file_page = &page->file;
+// 	file_page -> file = file;
+// 	return true;
 }
 
 
