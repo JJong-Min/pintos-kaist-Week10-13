@@ -79,7 +79,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			uninit_new (page, upage, init, type, aux, anon_initializer);
 		}
 		else if (VM_TYPE(type) == VM_FILE){
-			uninit_new (page, upage, init, type, aux, file_map_initializer);
+			uninit_new (page, upage, init, type, aux, file_backed_initializer);
 		}
 
 		page -> writable = writable_aux;
@@ -246,13 +246,6 @@ vm_do_claim_page (struct page *page) {
 	ASSERT (page != NULL);
 	frame->page = page;
 	page->frame = frame;
-
-	// Add to frame_list for eviction clock algorithm
-	if (clock_elem != NULL)
-		// Just before current clock
-		list_insert (clock_elem, &frame->elem);
-	else
-		list_push_back (&frame_list, &frame->elem);
 
 	/* Insert page table entry to map page's VA to frame's PA. */
 	if (!pml4_set_page (curr -> pml4, page -> va, frame->kva, page -> writable))
