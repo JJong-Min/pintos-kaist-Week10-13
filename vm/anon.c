@@ -8,6 +8,7 @@
 #include "threads/mmu.h"
 #include "include/devices/disk.h"
 
+#define CEILING(x, y) (((x) + (y) - 1) / (y))
 #define SECTORS_PER_PAGE CEILING(PGSIZE, DISK_SECTOR_SIZE)
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -29,7 +30,7 @@ static struct bitmap *swap_table;
 void
 vm_anon_init (void) {
 	/* set up the swap_disk */
-	swap_disk = dist_get(1, 1);
+	swap_disk = disk_get(1, 1);
 
 	disk_sector_t num_sector = disk_size (swap_disk);
 	size_t max_slot = num_sector / SECTORS_PER_PAGE;
