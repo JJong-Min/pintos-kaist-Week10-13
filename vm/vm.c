@@ -63,19 +63,29 @@ bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
 
-	ASSERT (VM_TYPE(type) != VM_UNINIT)
-
 	struct supplemental_page_table *spt = &thread_current ()->spt;
+	bool writable_aux = writable;
 
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page (spt, upage) == NULL) {
-		/* TODO: Create the page, fetch the initialier according to the VM type,
-		 * TODO: and then create "uninit" page struct by calling uninit_new. You
-		 * TODO: should modify the field after calling the uninit_new. */
+		/* Create the page, fetch the initialier according to the VM type,
+		 * and then create "uninit" page struct by calling uninit_new. You
+		 * should modify the field after calling the uninit_new. */
 
-		/* TODO: Insert the page into the spt. */
+		ASSERT(type != VM_UNINIT);
+		/* Insert the page into the spt. */
+		struct page* page = malloc (sizeof (struct page));
+		if (VM_TYPE(type) == VM_ANON){
+			uninit_new (page, upage, init, type, aux, anon_initializer);
+		}
+		else if (VM_TYPE(type) == VM_FILE){
+			uninit_new (page, upage, init, type, aux, file_map_initializer);
+		}
+
+		page -> writable = writable_aux;
+		spt_insert_page (spt, page);
+		return true;
 	}
-err:
 	return false;
 }
 
@@ -175,8 +185,6 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-	/* TODO: Fill this function. */
 	struct frame *frame = malloc(sizeof (struct frame));
 	frame->kva = palloc_get_page (PAL_USER);
 	frame->page = NULL;
