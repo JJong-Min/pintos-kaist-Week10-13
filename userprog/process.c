@@ -268,17 +268,15 @@ process_exec (void *f_name) {
 
 	/* We first kill the current context */
 	process_cleanup ();
-	supplemental_page_table_init (&thread_current () -> spt);
+	// supplemental_page_table_init (&thread_current () -> spt);
 	// printf("[process_exec] before load: %s\n", file_name);
 	/* And then load the binary */
 	success = load (file_name, &_if);
 	// printf("[process_exec] after load %d\n", success);
-
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
-
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
