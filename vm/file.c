@@ -1,6 +1,11 @@
 /* file.c: Implementation of memory backed file object (mmaped object). */
 
 #include "vm/vm.h"
+#include "threads/vaddr.h"
+#include "vm/file.h"
+#include <string.h>
+#include "threads/malloc.h"
+#include "threads/mmu.h"
 
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
@@ -13,20 +18,35 @@ static const struct page_operations file_ops = {
 	.destroy = file_backed_destroy,
 	.type = VM_FILE,
 };
+//Record of mmap, store mmap_file_info
+static struct list mmap_file_list;
+
+struct mmap_file_info{
+	struct list_elem elem;
+	uint64_t start;
+	// start addr of final page
+	uint64_t end;
+};
 
 /* The initializer of file vm */
 void
 vm_file_init (void) {
+	list_init (&mmap_file_list);
 }
 
-/* Initialize the file backed page */
+
+/* Initialize the file mapped page */
 bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
+	struct file *file = ((struct mmap_info *)page->uninit.aux)->file;
 	page->operations = &file_ops;
 
 	struct file_page *file_page = &page->file;
+	file_page -> file = file;
+	return true;
 }
+
 
 /* Swap in the page by read contents from the file. */
 static bool
