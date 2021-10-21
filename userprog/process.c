@@ -752,7 +752,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	return true;
 }
 
-#define WORD_ALIGN(addr) ((uint64_t)addr - ((uint64_t)addr/8)*8)
 /* Create a minimal stack by mapping a zeroed page at the USER_STACK */
 static bool
 setup_stack (struct intr_frame *if_) {
@@ -762,31 +761,8 @@ setup_stack (struct intr_frame *if_) {
 	kpage = palloc_get_page (PAL_USER | PAL_ZERO);
 	if (kpage != NULL) {
 		success = install_page (((uint8_t *) USER_STACK) - PGSIZE, kpage, true);
-		if (success) {
-			char **argv = (char **) if_->R.rsi;
-			uint64_t argc = if_->R.rdi;
-			uint64_t stack_pos = USER_STACK;
-			uint64_t args_pos[32];
-			for (int i=0;i<(int) argc;i++) {
-				size_t tmplen = strlen(argv[i]);
-				stack_pos = stack_pos - tmplen - 1;
-				strlcpy((char*) stack_pos, argv[i], 128);
-				args_pos[i] = stack_pos;
-			}
-			stack_pos -= WORD_ALIGN(stack_pos);
-			for (int i = argc;i>=0;i--) {
-				stack_pos -= 8;
-				if (i == (int) argc) *(char *)(stack_pos) = 0;
-				else {
-					memcpy((void *) stack_pos, &(args_pos[i]), 8);
-				}
-			}
-			stack_pos -= 8;
-			*((uint64_t *) stack_pos) = 0;
-			if_->rsp = stack_pos;
-			if_->R.rsi = stack_pos + 8;
-			if_->R.rdi = argc;
-		}
+		if (success)
+			if_->rsp = USER_STACK;
 		else
 			palloc_free_page (kpage);
 	}
@@ -844,6 +820,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
 
+	off_t read_ofs = ofs;
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE
@@ -852,15 +829,21 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		struct load_info *aux = malloc (sizeof (struct load_info));
+		aux -> file = file_reopen(file);
+		aux -> ofs = read_ofs;
+		aux -> page_read_bytes = page_read_bytes;
+		aux -> page_zero_bytes = page_zero_bytes;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
+					writable, lazy_load_segment, (void *) aux)) {
+			free (aux);
 			return false;
-
+		}
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		read_ofs += PGSIZE;
 	}
 	return true;
 }
