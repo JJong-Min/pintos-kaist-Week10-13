@@ -142,14 +142,14 @@ page_fault (struct intr_frame *f) {
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 	/* 2주차 userprog에서 test case 통과를 위해, page fault 발생 시 임시로 thread 종료 */
-	_exit(-1);
+
 
 #ifdef VM
 	/* For project 3 and later. */
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
 		return;
 #endif
-
+	_exit(-1);
 	/* Count page faults. */
 	page_fault_cnt++;
 
