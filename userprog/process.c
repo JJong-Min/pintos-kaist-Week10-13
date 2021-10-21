@@ -794,9 +794,26 @@ install_page (void *upage, void *kpage, bool writable) {
 
 static bool
 lazy_load_segment (struct page *page, void *aux) {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
+	/* Load the segment from the file */
+	/* This called when the first page fault occurs on address VA. */
+	/* VA is available when calling this function. */
+	struct load_info* li = (struct load_info *) aux;
+	if (page == NULL) return false;
+	ASSERT(li ->page_read_bytes <=PGSIZE);
+	ASSERT(li -> page_zero_bytes <= PGSIZE);
+	/* Load this page. */
+	if (li -> page_read_bytes > 0) {
+		file_seek (li -> file, li -> ofs);
+		if (file_read (li -> file, page -> va, li -> page_read_bytes) != (off_t) li -> page_read_bytes) {
+			vm_dealloc_page (page);
+			free (li);
+			return false;
+		}
+	}
+	memset (page -> va + li -> page_read_bytes, 0, li -> page_zero_bytes);
+	file_close (li -> file);
+	free (li);
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
