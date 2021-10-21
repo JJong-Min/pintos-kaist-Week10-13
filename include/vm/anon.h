@@ -1,6 +1,9 @@
 #ifndef VM_ANON_H
 #define VM_ANON_H
 #include "vm/vm.h"
+
+#define INVALID_SLOT_IDX SIZE_MAX
+
 struct page;
 enum vm_type;
 
