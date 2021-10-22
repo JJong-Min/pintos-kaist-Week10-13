@@ -212,14 +212,23 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	struct page *page = NULL;
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
-
+	struct thread *curr = thread_current ();
+	struct supplemental_page_table *spt = &curr->spt;
+	/* Validate the fault */
+	if (is_kernel_vaddr (addr) && user) return false;
+	void *stack_bottom = pg_round_down (curr->saved_sp);
+	if (write && (stack_bottom - PGSIZE <= addr &&
+	      (uintptr_t) addr < USER_STACK)) {
+	  /* Allow stack growth writing below single PGSIZE range
+	   * of current stack bottom inferred from stack pointer. */
+	  vm_stack_growth (addr);
+	  return true;
+	}
+	struct page* page = spt_find_page (spt, addr);
+	if (page == NULL) return false;
+	if (write && !not_present) return vm_handle_wp (page);
 	return vm_do_claim_page (page);
-}
-
+		}
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */
 void
@@ -280,6 +289,42 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+	struct hash_iterator i;
+	hash_first (&i, src->page_table);
+	while (hash_next (&i)) {
+		struct page *page = hash_entry (hassh_cur (&i), struct page, hash_elem);
+
+		if (page->operations->type == VM_UNINIT) {
+			vm_initializer *init = page->uninit.init;
+			bool writable = page->writable;
+			int type = agpe->uninit.type;
+			if (type & VM_ANON) {
+				struct load_info *li = malloc (sizeof (struct load_info));
+				li->file = file_duplicate (((struct load_info *) page -> uninit.aux)->file);
+				li->page_read_bytes = ((struct load_info *) page->uninit.aux)->page_read_bytes;
+				li->page_zero_bytes = ((struct load_info *) page->uninit.aux)->page_zero_bytes;
+				li->ofs = ((struct load_info *) page -> uninit.aux)->ofs;
+				vm_alloc_page_with_initializer (type, page->va, writable, init, (void *) li);
+			}
+			else if (type & VM_FILE) {
+
+			}
+		}
+		else if (page_get_type(page) == VM_ANON) {
+			if (!vm_alloc_page (page->operations->type, page->va, page->writable)) {
+				return false;
+			}
+			struct page *new_page = spt_find_page (&thread_current ()->spt, page->va);
+			if (!vm_do_claim_page (new_page)) {
+				return false;
+			}
+			memcpy (new_page->frame->kva, page->frame->kva, PGSIZE);
+		}
+		else if (page_get_type(page) == VM_FILE) {
+
+		}
+	}
+	return true;
 }
 
 /* Free the resource hold by the supplemental page table */
