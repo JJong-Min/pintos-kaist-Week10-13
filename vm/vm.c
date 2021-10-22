@@ -28,7 +28,12 @@ vm_init (void) {
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
 	/* TODO: Your code goes here. */
+	lock_init(&spt_kill_lock);
+	list_init (&frame_list);
+	clock_elem = NULL;
+	lock_init (&clock_lock);
 }
+
 
 /* Get the type of the page. This function is useful if you want to know the
  * type of the page after it will be initialized.
@@ -84,6 +89,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		page -> writable = writable_aux;
 		spt_insert_page (spt, page);
+
 		return true;
 	}
 	return false;
@@ -216,19 +222,19 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt = &curr->spt;
 	/* Validate the fault */
 	if (is_kernel_vaddr (addr) && user) return false;
-	void *stack_bottom = pg_round_down (curr->saved_sp);
-	if (write && (stack_bottom - PGSIZE <= addr &&
-	      (uintptr_t) addr < USER_STACK)) {
-	  /* Allow stack growth writing below single PGSIZE range
-	   * of current stack bottom inferred from stack pointer. */
-	  vm_stack_growth (addr);
-	  return true;
-	}
+	// void *stack_bottom = pg_round_down (curr->saved_sp);
+	// if (write && (stack_bottom - PGSIZE <= addr &&
+	//       (uintptr_t) addr < USER_STACK)) {
+	//   /* Allow stack growth writing below single PGSIZE range
+	//    * of current stack bottom inferred from stack pointer. */
+	//   vm_stack_growth (addr);
+	//   return true;
+	// }
 	struct page* page = spt_find_page (spt, addr);
 	if (page == NULL) return false;
-	if (write && !not_present) return vm_handle_wp (page);
+	// if (write && !not_present) return vm_handle_wp (page);
 	return vm_do_claim_page (page);
-		}
+	}
 /* Free the page.
  * DO NOT MODIFY THIS FUNCTION. */
 void
@@ -240,6 +246,7 @@ vm_dealloc_page (struct page *page) {
 /* Claim the page that allocate on VA. */
 bool
 vm_claim_page (void *va) {
+	//printf("\n\n vm_claim_page진입입니다\n\n");
 	struct page *page = spt_find_page (&thread_current () ->spt, va);
 	if (page == NULL) return false;
 	return vm_do_claim_page (page);
@@ -249,6 +256,7 @@ vm_claim_page (void *va) {
 static bool
 vm_do_claim_page (struct page *page) {
 	struct thread *curr = thread_current ();
+	//printf("\n\n vm_get_frame진입 전입니다\n\n");
 	struct frame *frame = vm_get_frame ();
 	/* Set links */
 	ASSERT (frame != NULL);
@@ -287,41 +295,44 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 
 /* Copy supplemental page table from src to dst */
 bool
-supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-		struct supplemental_page_table *src UNUSED) {
+supplemental_page_table_copy (struct supplemental_page_table *dst,
+		struct supplemental_page_table *src) {
+	/*Iterate Source spt hash table*/
 	struct hash_iterator i;
-	hash_first (&i, src->page_table);
+	hash_first (&i, src -> page_table);
 	while (hash_next (&i)) {
-		struct page *page = hash_entry (hassh_cur (&i), struct page, hash_elem);
+		struct page *page = hash_entry (hash_cur (&i), struct page, hash_elem);
 
-		if (page->operations->type == VM_UNINIT) {
-			vm_initializer *init = page->uninit.init;
-			bool writable = page->writable;
-			int type = agpe->uninit.type;
-			if (type & VM_ANON) {
-				struct load_info *li = malloc (sizeof (struct load_info));
-				li->file = file_duplicate (((struct load_info *) page -> uninit.aux)->file);
-				li->page_read_bytes = ((struct load_info *) page->uninit.aux)->page_read_bytes;
-				li->page_zero_bytes = ((struct load_info *) page->uninit.aux)->page_zero_bytes;
-				li->ofs = ((struct load_info *) page -> uninit.aux)->ofs;
-				vm_alloc_page_with_initializer (type, page->va, writable, init, (void *) li);
+		/*Handle UNINIT page*/
+		if (page -> operations -> type == VM_UNINIT){
+			vm_initializer* init = page ->uninit.init;
+			bool writable = page -> writable;
+			int type = page ->uninit.type;
+			if (type & VM_ANON){
+				struct load_info* li = malloc (sizeof (struct load_info));
+				li -> file = file_duplicate (((struct load_info *) page -> uninit .aux)->file);
+				li -> page_read_bytes = ((struct load_info *) page -> uninit .aux)->page_read_bytes;
+				li -> page_zero_bytes = ((struct load_info *) page -> uninit .aux)->page_zero_bytes;
+				li -> ofs = ((struct load_info *) page -> uninit .aux)->ofs;
+				vm_alloc_page_with_initializer (type, page -> va, writable, init, (void*) li);
 			}
-			else if (type & VM_FILE) {
+			else if (type & VM_FILE){
+				//Do_nothing(it should not inherit mmap)
+			}
 
-			}
 		}
-		else if (page_get_type(page) == VM_ANON) {
-			if (!vm_alloc_page (page->operations->type, page->va, page->writable)) {
+		
+		/* Handle ANON/FILE page*/
+		else if (page_get_type(page) == VM_ANON){
+			if (!vm_alloc_page (page -> operations -> type, page -> va, page -> writable))
 				return false;
-			}
-			struct page *new_page = spt_find_page (&thread_current ()->spt, page->va);
-			if (!vm_do_claim_page (new_page)) {
+			struct page* new_page = spt_find_page (&thread_current () -> spt, page -> va);
+			if (!vm_do_claim_page (new_page))
 				return false;
-			}
-			memcpy (new_page->frame->kva, page->frame->kva, PGSIZE);
+			memcpy (new_page -> frame -> kva, page -> frame -> kva, PGSIZE);
 		}
-		else if (page_get_type(page) == VM_FILE) {
-
+		else if (page_get_type(page) == VM_FILE){
+			//Do nothing(it should not inherit mmap)
 		}
 	}
 	return true;
@@ -340,9 +351,9 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt) {
 	/* Destroy all the supplemental_page_table hold by thread and
 	 * writeback all the modified contents to the storage. */
-	if (spt -> page_table == NULL) return;
+	if (spt->page_table == NULL) return;
 	lock_acquire(&spt_kill_lock);
-	hash_destroy (spt -> page_table, spt_destroy);
-	free (spt -> page_table);
+	hash_destroy (spt->page_table, spt_destroy);
+	free (spt->page_table);
 	lock_release(&spt_kill_lock);
 }
