@@ -327,9 +327,22 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 	return true;
 }
 
+static void
+spt_destroy (struct hash_elem *e, void *aux UNUSED){
+	struct page *page = hash_entry (e, struct page, hash_elem);
+	ASSERT (page != NULL);
+	destroy (page);
+	free (page);
+}
+
 /* Free the resource hold by the supplemental page table */
 void
-supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
-	/* TODO: Destroy all the supplemental_page_table hold by thread and
-	 * TODO: writeback all the modified contents to the storage. */
+supplemental_page_table_kill (struct supplemental_page_table *spt) {
+	/* Destroy all the supplemental_page_table hold by thread and
+	 * writeback all the modified contents to the storage. */
+	if (spt -> page_table == NULL) return;
+	lock_acquire(&spt_kill_lock);
+	hash_destroy (spt -> page_table, spt_destroy);
+	free (spt -> page_table);
+	lock_release(&spt_kill_lock);
 }
