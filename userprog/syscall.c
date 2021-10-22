@@ -130,6 +130,7 @@ void check_address(const char *uaddr) {
 		|| pml4_get_page(curr->pml4, uaddr) == NULL) {
 			_exit(-1);
 		}
+	struct page *page = spt_find_page (&thread_current() -> spt, uaddr);
 }
 
 /* 파일 객체의 주소값을 FDT에 추가하기 */
