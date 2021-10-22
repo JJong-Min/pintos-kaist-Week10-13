@@ -54,7 +54,6 @@ process_create_initd (const char *file_name) {
 	/* 새로 생성되는 thread의 이름을 실행하려는 프로그램명으로 수정 */
 	char *save_ptr;
 	file_name = strtok_r(file_name, " ", &save_ptr);
-	// printf("[process_create_initd] %s\n", file_name);
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -71,7 +70,7 @@ initd (void *f_name) {
 #endif
 
 	process_init ();
-
+	//printf("\n\ninid 입니다. process_exec 진입 전입니다.\n\n");
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED ();
@@ -179,8 +178,6 @@ __do_fork (void *aux) {
 	parent_if = &parent->parent_if;	
 	bool succ = true;
 
-	// printf("[__do_fork] checkpoint 1\n");
-
 	/* 1. Read the cpu context to local stack. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
 	if_.R.rax = 0; // syscall fork's return value for child process
@@ -267,10 +264,13 @@ process_exec (void *f_name) {
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
+	//printf("\n\nprocess_exec 입니다. process_cleanup 진입 전입니다.\n\n");
 	process_cleanup ();
-	// supplemental_page_table_init (&thread_current () -> spt);
+	//printf("\n\nsupplemental_page_table_init 진입 전입니다.\n\n");
+	supplemental_page_table_init (&thread_current () -> spt);
 	// printf("[process_exec] before load: %s\n", file_name);
 	/* And then load the binary */
+	//printf("\n\n load 진입 전입니다.\n\n");
 	success = load (file_name, &_if);
 	// printf("[process_exec] after load %d\n", success);
 	/* If load failed, quit. */
@@ -481,15 +481,13 @@ load (const char *file_name, struct intr_frame *if_) {
 	int argc = 0;
  
 	char *token, *save_ptr;
-	// printf("[load] file_name %d, %s\n", argc, file_name);
+
 	for (token = strtok_r(file_name, " ", &save_ptr); 
 		token != NULL;
 		token = strtok_r(NULL, " ", &save_ptr)) {
 			argv[argc] = (char *) token;
-			// printf("'%s'\n", argv[argc]);
 			argc++;
 	}
-	// printf("[load] file_name %d, %s\n", argc, file_name);
 
 	/* Open executable file. */
 	file = filesys_open (file_name);
@@ -567,6 +565,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Set up stack. */
+	//printf("\n\n setup_stack진입 전입니다\n\n");
 	if (!setup_stack (if_))
 		goto done;
 
