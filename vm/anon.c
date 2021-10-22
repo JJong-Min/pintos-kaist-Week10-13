@@ -24,17 +24,10 @@ static const struct page_operations anon_ops = {
 	.type = VM_ANON,
 };
 
-static struct bitmap *swap_table;
-
 /* Initialize the data for anonymous pages */
 void
 vm_anon_init (void) {
-	/* set up the swap_disk */
-	swap_disk = disk_get(1, 1);
 
-	disk_sector_t num_sector = disk_size (swap_disk);
-	size_t max_slot = num_sector / SECTORS_PER_PAGE;
-	swap_table = bitmap_create (max_slot);
 }
 
 /* Initialize the file mapping */
@@ -45,7 +38,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	if (type & VM_STACK) page->operations = &anon_ops;
 	struct anon_page *anon_page = &page->anon;
 	anon_page->owner = thread_current ();
-	anon_page->swap_slot_idx = INVALID_SLOT_IDX;
+	// anon_page->swap_slot_idx = INVALID_SLOT_IDX;
 	return true;
 }
 
@@ -65,5 +58,9 @@ anon_swap_out (struct page *page) {
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
 static void
 anon_destroy (struct page *page) {
-	struct anon_page *anon_page = &page->anon;
+	// if (page -> frame!= NULL){
+	// 	list_remove (&page->frame->elem);
+	// 	free(page->frame);
+	// }
+
 }
