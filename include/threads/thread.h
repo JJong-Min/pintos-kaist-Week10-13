@@ -151,7 +151,17 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+	struct list open_file;
 };
+
+struct thread_file {
+	struct file* file;
+	int fd;
+	struct list_elem elem;
+	//for stdin and stdout
+	int std;
+};
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
