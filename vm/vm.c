@@ -206,7 +206,18 @@ vm_get_frame (void) {
 
 /* Growing the stack. */
 static void
-vm_stack_growth (void *addr UNUSED) {
+vm_stack_growth (void *addr) {
+	void *stack_bottom = pg_round_down (addr);
+	size_t req_stack_size = USER_STACK - (uintptr_t)stack_bottom;
+	if (req_stack_size > (1 << 20)) PANIC("Stack limit exceeded!\n"); // 1MB
+
+	// Alloc page from tested region to previous claimed stack page.
+	void *growing_stack_bottom = stack_bottom;
+	while ((uintptr_t) growing_stack_bottom < USER_STACK &&
+		vm_alloc_page (VM_ANON | VM_STACK, growing_stack_bottom, true)) {
+	      growing_stack_bottom += PGSIZE;
+	};
+	vm_claim_page (stack_bottom); // Lazy load requested stack page only
 }
 
 /* Handle the fault on write_protected page */
@@ -222,14 +233,14 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt = &curr->spt;
 	/* Validate the fault */
 	if (is_kernel_vaddr (addr) && user) return false;
-	// void *stack_bottom = pg_round_down (curr->saved_sp);
-	// if (write && (stack_bottom - PGSIZE <= addr &&
-	//       (uintptr_t) addr < USER_STACK)) {
-	//   /* Allow stack growth writing below single PGSIZE range
-	//    * of current stack bottom inferred from stack pointer. */
-	//   vm_stack_growth (addr);
-	//   return true;
-	// }
+	void *stack_bottom = pg_round_down (curr->saved_sp);
+	if (write && (stack_bottom - PGSIZE <= addr &&
+	      (uintptr_t) addr < USER_STACK)) {
+	  /* Allow stack growth writing below single PGSIZE range
+	   * of current stack bottom inferred from stack pointer. */
+	  vm_stack_growth (addr);
+	  return true;
+	}
 	struct page* page = spt_find_page (spt, addr);
 	if (page == NULL) return false;
 	// if (write && !not_present) return vm_handle_wp (page);
