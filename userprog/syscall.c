@@ -5,20 +5,30 @@
 #include "threads/thread.h"
 #include "threads/loader.h"
 #include "userprog/gdt.h"
+#include "userprog/process.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
-#include "threads/init.h"
-#include "include/filesys/filesys.h"
-// added
-#include "userprog/process.h"
-#include "threads/palloc.h"
-#include "devices/input.h"
-#include <string.h>
+#include "user/syscall.h"
 #include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "threads/init.h"
+#include "lib/string.h"
+#include "lib/kernel/stdio.h"
+#include "lib/kernel/list.h"
+#include "devices/input.h"
+#include "threads/vaddr.h"
+#include "threads/mmu.h"
+#include "threads/palloc.h"
+#include "threads/malloc.h"
+#include "vm/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
+static void* mmap_s (void *addr, size_t length, int writable, int fd, off_t offset);
+static void munmap_s (void* addr);
+
+struct thread_file* get_tf(int fd);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -109,6 +119,12 @@ syscall_handler (struct intr_frame *f) {
 		case SYS_CLOSE:                  /* Close a file. */
 			_close(f->R.rdi);
 			break;
+		case SYS_MMAP:
+			f->R.rax = (uint64_t) mmap_s ((void*) f->R.rdi, (size_t) f->R.rsi, (int) f->R.rdx, (int) f->R.r10, (off_t) f->R.r8);
+			break;
+		case SYS_MUNMAP:
+			munmap_s ((void*) f->R.rdi);
+			break;
 		default:
 			printf("  DEFAULT do nothing..\n");
 			_exit(TID_ERROR);
@@ -131,6 +147,18 @@ void check_address(const char *uaddr) {
 			_exit(-1);
 		}
 	struct page *page = spt_find_page (&thread_current() -> spt, uaddr);
+}
+
+struct thread_file*
+get_tf(int fd){
+	struct thread* t = thread_current ();
+	if (!list_empty (&t->open_file)){
+		for (struct list_elem* i = list_front(&t->open_file); i!=list_end(&t->open_file); i = list_next(i) ){
+			struct thread_file* thread_file = list_entry (i, struct thread_file, elem);
+			if (fd == thread_file->fd) return thread_file;
+		}
+	}
+	return NULL;
 }
 
 /* 파일 객체의 주소값을 FDT에 추가하기 */
@@ -379,4 +407,28 @@ unsigned _tell (int fd) {
 	position = file_tell(file);
 	lock_release(&filesys_lock);
 	return position;
+}
+
+static void*
+mmap_s (void *addr, size_t length, int writable, int fd, off_t offset){
+	//Handle all parameter error and pass it to do_mmap
+	if (addr == 0 || (!is_user_vaddr(addr))) return NULL;
+	if ((uint64_t)addr % PGSIZE != 0) return NULL;
+	if (offset % PGSIZE != 0) return NULL;
+	if ((uint64_t)addr + length == 0) return NULL;
+	if (!is_user_vaddr((uint64_t)addr + length)) return NULL;
+	for (uint64_t i = (uint64_t) addr; i < (uint64_t) addr + length; i += PGSIZE){
+		if (spt_find_page (&thread_current() -> spt, (void*) i)!=NULL) return NULL;
+	}
+	struct thread_file* tf = get_tf (fd);
+	if (tf == NULL) return NULL;
+	if (tf->std == 0 || tf->std == 1) return NULL;
+	if (length == 0) return NULL;
+	struct file* file = tf->file;
+	return do_mmap(addr, length, writable, file, offset);
+}
+
+static void
+munmap_s (void* addr){
+	do_munmap(addr);
 }
